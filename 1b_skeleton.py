@@ -6,9 +6,10 @@ but do not modify the other functions. print_generation_info() must be called on
 
 # <--- ADD ADDITONAL IMPORTS HERE --->
 import argparse
+import numpy as np
+import os
 
-
-
+#TODO: if best fitness doesn't change over multiple generations, add some stronger variation
 
 # <---------------------------------->
 
@@ -16,18 +17,89 @@ import argparse
 # <--- ADD ADDITONAL DEFINES HERE --->
 
 # Population size: Defines how many individuals are in the initial population. (You can change this value)
+MAX_GENERATIONS = 1000
 POPULATION_SIZE = 100 # use this value for the generation of your inital population.
+NUM_QUEENS = 512 # size of one individual
+MUTATION_NUM = 5 #number of columns swapped in mutation
+BEST_NUM = POPULATION_SIZE//10
+RAND_RATIO = 2 #ration of best individuals used for randomization
+CROSS = True
+MUTATE = True
+relative_knight_moves = [(2,1),(2,-1),(-2,1),(-2,-1),(1,2),(1,-2),(-1,2),(-1,-2)]
 
+LOAD_BEST = True
+SAVE_BEST = True
+save_path = "best_solution_3.npy"
 
-
+STAGNATION_DETECTION = True
+MAX_STAGNATION = 5
+RESET_RATIO = 2
 
 # <---------------------------------->
 
 
 # <--- ADD ADDITONAL FUNCTIONS HERE --->
+def generate_population(pop_size):
+    pop = []
+    #initialization of all queens in separate rows and columns
+    for _ in range(pop_size):
+        pop.append(np.random.permutation(NUM_QUEENS))
+    print(f"Initialized random population of size {POPULATION_SIZE} with {NUM_QUEENS} queens each.")
+    return pop
 
+def get_fitness(pop):
+    safe = [1]*512
 
+    for col1 in range(NUM_QUEENS):
+        row1 = int(pop[col1])
+        #from left to right, check diagonals(only to its right, to avoid double checks)
+        for col2 in range(col1+1,NUM_QUEENS):
+            row2 = int(pop[col2])
+            if abs(col1-col2)==abs(row1-row2):
+                safe[col1] = safe[col2] = 0
 
+        #attacks from knight moves
+        for kmx, kmy in relative_knight_moves:
+            col_threat = col1+kmy
+            row_threat = row1+kmx
+
+            if (0<= col_threat < NUM_QUEENS) and (0<= row_threat <NUM_QUEENS):
+                if pop[col_threat] == row_threat:
+                    safe[col1] = safe[col_threat] = 0
+    
+    #return number of safe queens
+    return sum(safe)
+
+def get_best_individuals(pop,fitnesses,sel = BEST_NUM):
+    #sorting individuals based on best fitnesses
+    ranked_fitnesses, ranked_pop = list(zip(*sorted(zip(fitnesses,pop),key = lambda x: x[0],reverse=True)))
+
+    return list(ranked_pop[:sel])
+
+def cross(ind1,ind2):
+    #crossing two individuals without causing any queens to be in the same row
+    a, b = sorted(np.random.choice(range(NUM_QUEENS), 2, replace=False))
+
+    pop_new = np.ones(NUM_QUEENS)*-1#initialize with invalid values
+
+    # choose random segment out of individual 1
+    pop_new[a:b] = ind1[a:b]
+    # fill in only the remaining rows with quees from individual 2
+    ind2_remaining = [ind2[i] for i in range(NUM_QUEENS) if (ind2[i] not in ind1[a:b])]
+    for p,pn in enumerate(pop_new):
+        if pn == -1:
+            pop_new[p] = ind2_remaining.pop(0)
+
+    return np.array(pop_new)
+
+def mutate(ind1, number):
+    #randomly perform number of column swaps, so no row conflicts are created
+    #for now duplicate swaps are possible
+    for _ in range(number):
+        col1,col2 = np.random.choice(NUM_QUEENS, 2, replace=False)
+        ind1[col2], ind1[col1] = ind1[col1], ind1[col2]
+
+    return ind1
 
 
 # <------------------------------------>
@@ -39,8 +111,91 @@ def genetic_algorithm(gui_mode=False):
     Args:
         gui_mode (bool): If True, run the algorithm with a GUI. Is completly free to you if you want to use that.
     """
+    current_pop = generate_population(POPULATION_SIZE)
+    best_fitness = 0
+    mean_fitness = 0
+    generation = 0
 
-    pass  # TODO: Implement GA logic
+    stagnation_counter = 0
+    last_best = 0
+
+    #load the prevously found best version to not start from scratch
+    try:
+        if os.path.exists(save_path) and LOAD_BEST:
+            saved = np.load(save_path)
+            # if the file holds a permutation of the right size, include it
+            if isinstance(saved, np.ndarray) and saved.shape == (NUM_QUEENS,):
+                current_pop[0] = saved.copy()
+                print(">>> Loaded previous solution into initial population")
+    except Exception:
+        # ignore any loading errors
+        pass
+
+    while best_fitness<NUM_QUEENS and generation<MAX_GENERATIONS:
+
+        #evaluate individuals statistics in current population
+        fitnesses = []
+        for k,ind in enumerate(current_pop):
+            fitnesses.append(get_fitness(ind))
+            print(f"Checking individual {k+1}/{POPULATION_SIZE}",end="\r")
+        mean_fitness = sum(fitnesses)/POPULATION_SIZE
+        if max(fitnesses)>best_fitness:
+            best_fitness = max(fitnesses)
+        print(f"")
+        print_generation_info(generation,best_fitness,mean_fitness)
+
+        #choose the best individuals of the current population (in this case all are chosen, but now ordered by fitness)
+        ordered_pop = get_best_individuals(current_pop,fitnesses,POPULATION_SIZE)
+
+        #add best of prevous population, but only a few to not get stuck in local maxima
+        new_population = ordered_pop[:BEST_NUM]
+
+        #fill up new population
+        while len(new_population) < POPULATION_SIZE:
+
+            #add slightly altered versions of previous population
+            rand_choice = np.random.randint(POPULATION_SIZE)
+            best_ind_altered = ordered_pop[rand_choice].copy()#in case no crossing is used
+            if CROSS:
+                rand_ind1 = ordered_pop[np.random.randint(POPULATION_SIZE//RAND_RATIO)]
+                rand_ind2 = ordered_pop[np.random.randint(POPULATION_SIZE//RAND_RATIO)]
+                best_ind_altered = cross(rand_ind1,rand_ind2)
+            if MUTATE:
+                best_ind_altered = mutate(best_ind_altered,MUTATION_NUM)
+            new_population.append(best_ind_altered)
+
+        #check if progress is stagnating -> add stronger variation if necessary
+        if best_fitness > last_best:
+            stagnation_counter = 0
+            last_best = best_fitness
+        else:
+            stagnation_counter += 1
+        
+        #randomize part of population again in case progress is stagnating
+        if stagnation_counter > MAX_STAGNATION and STAGNATION_DETECTION:
+            print(">>> Stagnation detected – injecting diversity")
+
+            for i in range(POPULATION_SIZE//RESET_RATIO, POPULATION_SIZE):
+                new_population[i] = np.random.permutation(NUM_QUEENS)
+
+            stagnation_counter = 0
+        
+        #use newly shuffled population
+        current_pop = new_population
+        generation += 1
+
+        
+        #save a copy of the best solution every time to not loose progress
+        if (best_solution is not None) and SAVE_BEST:
+            best_solution = current_pop[np.argmax(fitnesses)].copy()
+            try:
+                np.save(save_path, best_solution)
+                print(f"Saved best solution (fitness={best_fitness:.2f}) to best_solution.npy")
+            except Exception as e:
+                print(f"Warning: could not save solution: {e}")
+
+
+    
 
 def print_generation_info(generation: int, best_fitness: float, mean_fitness: float) -> None:
     """
@@ -52,7 +207,7 @@ def print_generation_info(generation: int, best_fitness: float, mean_fitness: fl
         mean_fitness (float): The arithmetic mean (average) fitness value of the current population.
     """
 
-    N = 100  # Print every 100 generations (adjustable)
+    N = 10  # Print every 100 generations (adjustable)
     if generation % N == 0:
         print(f" Generation {generation:>7} | Best Fitness: {best_fitness:.2f} | Mean Fitness: {mean_fitness:.2f} ")
 
