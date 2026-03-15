@@ -8,6 +8,7 @@ but do not modify the other functions. print_generation_info() must be called on
 import argparse
 import numpy as np
 import os
+from numba import njit
 
 #TODO: if best fitness doesn't change over multiple generations, add some stronger variation
 
@@ -17,28 +18,29 @@ import os
 # <--- ADD ADDITONAL DEFINES HERE --->
 
 # Population size: Defines how many individuals are in the initial population. (You can change this value)
-MAX_GENERATIONS = 10 # max. repetitions of starting off with slightly altered population
-POPULATION_SIZE = 10 # size of the initial populatioon (number of individual queen configurations)
+MAX_GENERATIONS = 1000 # max. repetitions of starting off with slightly altered population
+POPULATION_SIZE = 100 # size of the initial populatioon (number of individual queen configurations)
 NUM_QUEENS = 512 # number of queens (and their positions) in one individual
 BEST_NUM = POPULATION_SIZE//10 # number of individuals taken over unaltered to the next generation
-RAND_RATIO = 2   #ratio of best individuals used for randomization
+RAND_RATIO = 0.5   #ratio of best individuals used for randomization
 CROSS = True     #mixing of two random individuals within RAND_RATIO of best ones
 MUTATE = True    #switching MUTATION_NUM of queens in one of the RAND_RATIO best individuals
-MUTATION_NUM = 5 #number of columns (queen positions) swapped in mutation
+MUTATION_NUM = 2 #number of columns (queen positions) swapped in mutation
 
 #possible moves of knight relative to its position
-relative_knight_moves = [(2,1),(2,-1),(-2,1),(-2,-1),(1,2),(1,-2),(-1,2),(-1,-2)]
+relative_knight_moves = np.array([(2,1),(2,-1),(-2,1),(-2,-1),(1,2),(1,-2),(-1,2),(-1,-2)],dtype=np.int32)
 
 #using previously found good population with good maximum fit (to not start off completely from zero)
 LOAD_BEST = True
 SAVE_BEST = True
 save_folder = "./prior_populations"
-load_path = f"{save_folder}/best_solution_4.npy"
+#load_path = f"{save_folder}/best_solution_6.npy"
+load_path = f"1b_working_solution.npy"
 working_path = "1b_working_solution.npy"
 
 #heavier randomization if fitness doesn't improve after MAX_STATNATION generations
 STAGNATION_DETECTION = True
-MAX_STAGNATION = 5 #max. allowed subsequent generations with same fitness
+MAX_STAGNATION = 10 #max. allowed subsequent generations with same fitness
 RESET_RATIO = 2    #ratio of (worst) individuals that will be completely randomized again
 
 # <---------------------------------->
@@ -53,25 +55,48 @@ def generate_population(pop_size):
     print(f"Initialized random population of size {POPULATION_SIZE} with {NUM_QUEENS} queens each.")
     return pop
 
+@njit
 def get_fitness(pop):
     safe = [1]*512
 
-    for col1 in range(NUM_QUEENS):
-        row1 = int(pop[col1])
-        #from left to right, check diagonals(only to its right, to avoid double checks)
-        for col2 in range(col1+1,NUM_QUEENS):
-            row2 = int(pop[col2])
-            if abs(col1-col2)==abs(row1-row2):
-                safe[col1] = safe[col2] = 0
+    #efficient diagonal check
+    #diagonals have a constant row+col or row-col, so values lie between 0 and 511*2
+    diagonal_1 = np.zeros(2*NUM_QUEENS) 
+    diagonal_2 = np.zeros(2*NUM_QUEENS)
+
+    #count the queens per diagonal
+    for col in range(NUM_QUEENS):
+        row = int(pop[col])
+        #diagonals are defined by having a constant value for row-col
+        # i.e. main falling diagonal row-col = 1, first diagonal above that has row-col = -1
+        #      main rising diagonal  row+col = 512, first diagonal above that has row+col = 512 -1
+        d1 = int(row-col + NUM_QUEENS) # keep the value positive for convenience
+        d2 = int(row+col)
+        diagonal_1[d1] += 1
+        diagonal_2[d2] += 1
+
+    #mark where queens are on same diagonal
+    for col in range(NUM_QUEENS):
+        row = int(pop[col])
+
+        #check on which rising and falling diagonal the queen is located
+        d1 = int(row-col + NUM_QUEENS)
+        d2 = int(row+col)
+        #if another queen is on that diagonal, queen is threatened
+        if diagonal_1[d1] > 1 or diagonal_2[d2] > 1:
+            safe[col] = 0
+
+    for col in range(NUM_QUEENS):
+        row = int(pop[col])
 
         #attacks from knight moves
         for kmx, kmy in relative_knight_moves:
-            col_threat = col1+kmy
-            row_threat = row1+kmx
+            col_threat = int(col+kmy)
+            row_threat = int(row+kmx)
 
             if (0<= col_threat < NUM_QUEENS) and (0<= row_threat <NUM_QUEENS):
                 if pop[col_threat] == row_threat:
-                    safe[col1] = safe[col_threat] = 0
+                    safe[col] = safe[col_threat] = 0
     
     #return number of safe queens
     return sum(safe)
@@ -99,13 +124,26 @@ def cross(ind1,ind2):
     return np.array(pop_new)
 
 def mutate(ind1, number):
+    
+    #saving original version, to see if mutation made it better or worse
+    ind1_original = ind1.copy()
+    fitness_original = get_fitness(ind1_original)
+
     #randomly perform number of column swaps, so no row conflicts are created
     #for now duplicate swaps are possible
     for _ in range(number):
         col1,col2 = np.random.choice(NUM_QUEENS, 2, replace=False)
         ind1[col2], ind1[col1] = ind1[col1], ind1[col2]
+    
+    fitness_new = get_fitness(ind1)
 
-    return ind1
+    #only accept the mutation if it improved fitness
+    if fitness_new>fitness_original:
+        return ind1
+    else:
+        return ind1_original
+
+    
 
 
 # <------------------------------------>
@@ -140,14 +178,12 @@ def genetic_algorithm(gui_mode=False):
     while best_fitness<NUM_QUEENS and generation<MAX_GENERATIONS:
 
         #evaluate individuals statistics in current population
-        fitnesses = []
-        for k,ind in enumerate(current_pop):
-            fitnesses.append(get_fitness(ind))
-            print(f"Checking individual {k+1}/{POPULATION_SIZE}",end="\r")
+        fitnesses = [get_fitness(ind) for ind in current_pop]
+            #print(f"Checking individual {k+1}/{POPULATION_SIZE}",end="\r")
         mean_fitness = sum(fitnesses)/POPULATION_SIZE
         if max(fitnesses)>best_fitness:
             best_fitness = max(fitnesses)
-        print(f"")
+        #print(f"")
         print_generation_info(generation,best_fitness,mean_fitness)
 
         #choose the best individuals of the current population (in this case all are chosen, but now ordered by fitness)
@@ -163,8 +199,8 @@ def genetic_algorithm(gui_mode=False):
             rand_choice = np.random.randint(POPULATION_SIZE)
             best_ind_altered = ordered_pop[rand_choice].copy()#in case no crossing is used
             if CROSS:
-                rand_ind1 = ordered_pop[np.random.randint(POPULATION_SIZE//RAND_RATIO)]
-                rand_ind2 = ordered_pop[np.random.randint(POPULATION_SIZE//RAND_RATIO)]
+                rand_ind1 = ordered_pop[np.random.randint(int(POPULATION_SIZE*RAND_RATIO))]
+                rand_ind2 = ordered_pop[np.random.randint(int(POPULATION_SIZE*RAND_RATIO))]
                 best_ind_altered = cross(rand_ind1,rand_ind2)
             if MUTATE:
                 best_ind_altered = mutate(best_ind_altered,MUTATION_NUM)
@@ -196,7 +232,7 @@ def genetic_algorithm(gui_mode=False):
         if (best_solution is not None) and SAVE_BEST:
             try:
                 np.save(working_path, best_solution)
-                print(f"Saved best solution (fitness={best_fitness:.2f}) to best_solution.npy")
+                #print(f"Saved best solution (fitness={best_fitness:.2f}) to {working_path}")
             except Exception as e:
                 print(f"Warning: could not save solution: {e}")
 
