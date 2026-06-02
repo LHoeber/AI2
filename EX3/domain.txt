@@ -1,0 +1,119 @@
+(define (domain subot)
+  (:requirements :strips :typing :negative-preconditions :numeric-fluents :disjunctive-preconditions :equality)
+
+  (:types location item robot)
+
+  (:predicates
+      (at ?r - robot ?l - location)
+      (connected ?l1 - location ?l2 - location)
+      (carrying ?i - item)
+      (served-dinner)
+      (medicine-placed)
+      (laundry-done)
+      (chatted)
+  )
+
+  (:functions
+      (battery-level)
+      (time)
+  )
+
+  ;; Definiton of all actions
+
+(:action move
+  :parameters (?from - location ?to - location)
+  :precondition (and
+      (at robot ?from)
+      (connected ?from ?to)
+      (>= (battery-level) 1)
+  )
+  :effect (and
+      (not (at robot ?from))
+      (at robot ?to)
+      (decrease (battery-level) 1)
+      (increase (time) 1)
+  )
+)
+
+(:action recharge
+  :parameters (?c - location)
+  :precondition (and
+      (at robot ?c)
+      (or (= ?c chargingstation1) (= ?c chargingstation2))
+  )
+  :effect (and
+      (assign (battery-level) 20)
+      (increase (time) 1)
+  )
+)
+
+(:action get-groceries
+  :parameters ()
+  :precondition (at robot market)
+  :effect (carrying groceries)
+)
+
+(:action get-medicine
+  :parameters ()
+  :precondition (at robot pharmacy)
+  :effect (carrying medicine)
+)
+
+(:action place-medicine
+  :parameters ()
+  :precondition (and
+      (at robot bathroom)
+      (carrying medicine)
+  )
+  :effect (and
+        (medicine-placed)
+        (not (carrying medicine))
+        )
+)
+
+(:action prepare-dinner
+  :parameters ()
+  :precondition (and
+      (at robot kitchen)
+      (carrying groceries)
+  )
+  :effect (and
+      (not (carrying groceries))
+      (carrying dinner)
+      (increase (time) 1)
+  )
+)
+
+(:action serve-dinner
+  :parameters ()
+  :precondition (and
+      (at robot diningroom)
+      (carrying dinner)
+      (>= (time) 7)
+      (<= (time) 18)
+  )
+  :effect (served-dinner)
+)
+
+(:action chat
+  :parameters ()
+  :precondition (and
+      (at robot diningroom)
+      (served-dinner)
+      (>= (time) 7)
+      (<= (time) 18)
+  )
+  :effect (and
+      (chatted)
+      (increase (time) 1)
+  )
+)
+
+(:action do-laundry
+  :parameters ()
+  :precondition (at robot bathroom)
+  :effect (laundry-done)
+)
+
+)
+

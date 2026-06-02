@@ -1,0 +1,50 @@
+(define (problem subot-problem)
+  (:domain subot)
+
+(:objects
+    entrance bathroom kitchen diningroom road1 road2 road3 center
+    pharmacy market chargingstation1 chargingstation2 - location
+
+    groceries medicine dinner - item
+
+    robot - robot
+)
+
+(:init
+    (at robot entrance)
+    (= (battery-level) 2)
+    (= (time) 1)
+
+    ;; all connections from the figure
+    (connected entrance bathroom)
+    (connected entrance diningroom)
+    (connected entrance chargingstation1)
+    (connected entrance kitchen)
+    (connected entrance road1)
+    (connected road1 center)
+    (connected road2 center)
+    (connected road3 center)
+    (connected chargingstation2 center)
+    (connected road3 market)
+    (connected road2 pharmacy)
+    ;; all reverse connections
+    (connected bathroom entrance)
+    (connected diningroom entrance)
+    (connected chargingstation1 entrance)
+    (connected kitchen entrance)
+    (connected road1 entrance)
+    (connected center road1)
+    (connected center road2)
+    (connected center road3)
+    (connected center chargingstation2)
+    (connected market road3)
+    (connected pharmacy road2)
+)
+
+(:goal (and
+    (served-dinner)
+    (medicine-placed)
+    (laundry-done)
+    (chatted)
+))
+)

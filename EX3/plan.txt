@@ -1,0 +1,79 @@
+domain parsed
+problem parsed
+grounding..
+grounding time: 31
+aibr preprocessing
+|f|:19
+|x|:2
+|a|:31
+|p|:0
+|e|:0
+h1 setup time (msec): 7
+ g(n)= 3.0 h(n)=38.0
+ g(n)= 5.0 h(n)=32.0
+ g(n)= 7.0 h(n)=29.0
+ g(n)= 10.0 h(n)=27.0
+ g(n)= 18.0 h(n)=22.0
+ g(n)= 19.0 h(n)=17.0
+ g(n)= 18.0 h(n)=13.0
+ g(n)= 19.0 h(n)=12.0
+ g(n)= 20.0 h(n)=10.0
+ g(n)= 21.0 h(n)=9.0
+ g(n)= 22.0 h(n)=7.0
+ g(n)= 27.0 h(n)=6.0
+ g(n)= 33.0 h(n)=5.0
+ g(n)= 34.0 h(n)=4.0
+ g(n)= 35.0 h(n)=3.0
+ g(n)= 36.0 h(n)=2.0
+ g(n)= 37.0 h(n)=1.0
+problem solved
+
+found plan:
+0.0: (move entrance chargingstation1)
+1.0: (recharge chargingstation1)
+2.0: (move chargingstation1 entrance)
+3.0: (move entrance bathroom)
+4.0: (do-laundry)
+5.0: (move bathroom entrance)
+6.0: (move entrance road1)
+7.0: (move road1 center)
+8.0: (move center road3)
+9.0: (move road3 market)
+10.0: (get-groceries)
+11.0: (move market road3)
+12.0: (move road3 center)
+13.0: (move center road1)
+14.0: (move road1 entrance)
+15.0: (move entrance kitchen)
+16.0: (prepare-dinner)
+17.0: (move kitchen entrance)
+18.0: (move entrance diningroom)
+19.0: (serve-dinner)
+20.0: (chat)
+21.0: (move diningroom entrance)
+22.0: (move entrance bathroom)
+23.0: (move bathroom entrance)
+24.0: (move entrance chargingstation1)
+25.0: (recharge chargingstation1)
+26.0: (move chargingstation1 entrance)
+27.0: (move entrance road1)
+28.0: (move road1 center)
+29.0: (move center road2)
+30.0: (move road2 pharmacy)
+31.0: (get-medicine)
+32.0: (move pharmacy road2)
+33.0: (move road2 center)
+34.0: (move center road1)
+35.0: (move road1 entrance)
+36.0: (move entrance bathroom)
+37.0: (place-medicine)
+
+plan-length:38
+metric (search):38.0
+planning time (msec): 69
+heuristic time (msec): 37
+search time (msec): 65
+expanded nodes:670
+states evaluated:826
+number of dead-ends detected:274
+number of duplicates detected:518
